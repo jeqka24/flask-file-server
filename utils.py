@@ -1,9 +1,5 @@
-from cryptography import fernet
 import tasks
 
-def generate_key():
-    key = fernet.Fernet.generate_key()
-    return key
 
 def encode(file, key):
     '''
@@ -12,7 +8,7 @@ def encode(file, key):
     :param key:
     :return:
     '''
-    while(file):
+    while (file):
         yield file.read()
     return file
 
@@ -24,4 +20,3 @@ def decode(file, key):
     :param key:
     :return:
     '''
-

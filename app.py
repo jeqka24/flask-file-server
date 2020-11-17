@@ -10,7 +10,7 @@ from flask import request, Flask, abort, render_template, redirect, url_for
 
 from entities import db, File, FileState, User
 
-from utils import encode, decode, generate_key
+from utils import encode, decode
 
 UPLOAD_DIR = "upload"
 
@@ -183,11 +183,11 @@ def mirror(**kvargs):
     return render_template("mirror.html", **kvargs)
 
 def browser():
-    webbrowser.open_new(app.config"/home?%s=%s" % (APIKEY_NAME, User[1].auth_token))
+    webbrowser.open_new("http://127.0.0.1:8090/home?%s=%s" % (APIKEY_NAME, User[1].auth_token))
 
 # application execution
 if __name__ == '__main__':
     if not (db.database):
         init_db()
+    Timer(1.25, browser()).start()
     app.run(port=8090)
-    Timer(0.25, browser()).start()
