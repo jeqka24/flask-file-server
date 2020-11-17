@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h2>Хранилище файлов</h2>
+{% if message %}
+<h4 style="color: #282;">{{ message }}</h4>
+{% endif %}
+
+<p>
+    Загрузка файлов:
+</p>
+<form action="{{ url_for('upload') }}" method=POST enctype=multipart/form-data id="fileupload">
+    {% if not(user) %}
+    <label for="{{ APIKEY_NAME }}">Авторизация:</label>
+    {% else %}
+    <label for="{{ APIKEY_NAME }}">Авторизован!</label>
+    {% endif %}
+    <input type="text" id="{{ APIKEY_NAME }}" name="{{ APIKEY_NAME }}" value="{{ user }}" {% if user %} hidden="true" {%
+           endif %}> <br/>
+
+    <input type="file" name="files" data-url="{{ url_for('upload') }}" multiple><br/>
+    <input type=submit value=Post>
+</form>
+
+<hr/>
+{% if files %}
+<table class="table table-striped">
+    <thead><tr >
+        <th scope="col">Файл</th>
+        <th scope="col">Состояние</th>
+        <th scope="col">Удалить</th>
+    </tr>
+        </thead>
+    {% for f in files %}
+    <tr>
+      <td><a href='{{ url_for("download", file=f.uuid, **{APIKEY_NAME:user} ) }}' target="_blank">{{ f.name }}</a></td>
+      <td>{{ f.state.state }}</td>
+      <td align="center"><a href='{{ url_for("delete", file=f.uuid, **{APIKEY_NAME:user})}}'>X</a></td>
+    </tr>
+    {% endfor %}
+</table>
+{% endif %}
+
+{% endblock %}
