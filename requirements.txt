@@ -1,3 +1,9 @@
-flask
-huey
-peewee
+click==7.1.2
+Flask==1.1.2
+huey==2.3.0
+itsdangerous==1.1.0
+Jinja2==2.11.2
+MarkupSafe==1.1.1
+peewee==3.14.0
+six==1.15.0
+Werkzeug==1.0.1

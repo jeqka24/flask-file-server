@@ -1,22 +1,27 @@
-import tasks
+import secrets
+from itertools import cycle
 
 
-def encode(file, key):
+def generate_key():
+    key = secrets.token_bytes(16)
+    return key
+
+
+def encode(byte_in, key):
     '''
-    Encodes file
-    :param file: a file (stream)
-    :param key:
-    :return:
+    Encodes file (simple XORing)
+    :param byte_in: bytearray
+    :param key: bytearray (shorter)
+    :return: bytearray
     '''
-    while (file):
-        yield file.read()
-    return file
+    return bytearray(b ^ c for b, c in zip(byte_in, cycle(key)))
 
 
-def decode(file, key):
+def decode(byte_in, key):
     '''
     Decodes file with a given key
-    :param file:
-    :param key:
-    :return:
+    :param byte_in: bytearray
+    :param key: bytearray (shorter)
+    :return: bytearray
     '''
+    return encode(byte_in, key)

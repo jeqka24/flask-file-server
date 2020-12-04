@@ -1,16 +1,15 @@
+import os
 from functools import wraps
 from uuid import uuid4
-import os
-
 from threading import Timer
+
 import webbrowser
 
-import flask
-from flask import request, Flask, abort, render_template, redirect, url_for
+from flask import request, Flask, abort, render_template, redirect, url_for, Response, stream_with_context
 
 from entities import db, File, FileState, User
-
-from utils import encode, decode
+from utils import generate_key, decode
+from tasks import encode_file, CHUNK_SIZE
 
 UPLOAD_DIR = "upload"
 
@@ -18,6 +17,7 @@ CUR_DIR = os.path.realpath(os.path.dirname(__file__))
 UPLOAD_FOLDER = os.path.join(CUR_DIR, UPLOAD_DIR)
 
 APIKEY_NAME = 'api-key'
+DEBUG = os.environ.get('DEBUG')
 # DEBUG = True
 
 app = Flask(
@@ -84,7 +84,8 @@ def init_db():
     FileState.create(state="Кодируется", r_accessible=False)
     FileState.create(state="Закодирован")
     FileState.create(state="Удален", r_accessible=False, d_accessible=False)
-    u = User.create(auth_token=uuid4(), pkey=generate_key())
+    pkey = generate_key()
+    u = User.create(auth_token=uuid4(), pkey=pkey)
     app.logger.info("First user: %s" % u.auth_token)
     db.commit()
 
@@ -103,23 +104,16 @@ def upload():
 
         state = FileState.get_or_none(state="Загружается")
         curr_file = File.create(uuid=filename, name=f.filename, state=state.id, owner=owner)
-        app.logger.info("save to FS")
+        app.logger.info("saving to FS")
         f.save(dst=os.path.join(app.config['UPLOAD_FOLDER'], filename))
 
-        state = FileState.get_or_none(state="Загружен")
-        curr_file.state = state.id
-        curr_file.save()
+        curr_file.set_state("Загружен")
 
-        # create a task of encrypting file
-        state = FileState.get_or_none(state="Кодируется")
-        curr_file.state = state.id
-        curr_file.save()
-        # encode - still empty
+        curr_file.set_state("Кодируется")
+        # create a task : encrypt the file
+        encode_file(filename=os.path.join(app.config['UPLOAD_FOLDER'], filename), key=owner.pkey)
 
-        state = FileState.get_or_none(state="Закодирован")
-        curr_file.state = state.id
-        curr_file.save()
-
+        curr_file.set_state("Закодирован")
 
     app.logger.info("Upload request finished")
     return redirect(url_for('home', **{APIKEY_NAME: owner.auth_token}))
@@ -141,8 +135,25 @@ def download(file, **kwargs):
         fs = FileState.get_or_none(fob.state)  # file state
     else:
         abort(404)
+
     if fs.r_accessible:
-        return flask.send_file(filename_or_fp=get_file_path(file), as_attachment=True, attachment_filename=fob.name)
+        # Return file as it is stored
+        # return flask.send_file(filename_or_fp=get_file_path(file), as_attachment=True, attachment_filename=fob.name)
+        # Return decoded file:
+        def g(filename, key):
+            print("inside...")
+            with open(filename, 'rb') as fi:
+                while fi.readable():
+                    chunk = fi.read(CHUNK_SIZE)
+                    if len(chunk) > 0:
+                        print("Yielding...")
+                        yield bytes(decode(chunk, key))
+                    else:
+                        break
+        r = Response(stream_with_context(g(get_file_path(file), us.pkey)))
+        r.headers["Content-Disposition"] = 'attachment; filename="%s"' % fob.name
+        r.headers["Content-Type"] = 'application/octet-stream'
+        return r
     else:
         abort(403)
 
@@ -151,18 +162,18 @@ def download(file, **kwargs):
 @require_auth
 def delete(file):
     us = get_user()
-    Query = File.delete().where(File.uuid == file)
-    Query.execute()
+    query = File.delete().where(File.uuid == file)
+    query.execute()
     os.remove(get_file_path(file))
-    return redirect(url_for("home",  **{APIKEY_NAME:us.auth_token}), code=302)
+    return redirect(url_for("home", **{APIKEY_NAME: us.auth_token}), code=302)
 
 
 @app.route("/", methods=["GET", ])
 def index():
     us = get_user()
-    if not(us):
+    if not (us):
         abort(401, "API key required")
-    return redirect(url_for("home",  **{APIKEY_NAME:us.auth_token}), code=302)
+    return redirect(url_for("home", **{APIKEY_NAME: us.auth_token}), code=302)
 
 
 @app.route('/home', methods=["GET", ])
@@ -182,12 +193,15 @@ def mirror(**kvargs):
     kvargs['c'] = request.files
     return render_template("mirror.html", **kvargs)
 
+
 def browser():
-    webbrowser.open_new("http://127.0.0.1:8090/home?%s=%s" % (APIKEY_NAME, User[1].auth_token))
+    webbrowser.open_new(url_for("home", **{APIKEY_NAME: User[1].auth_token}))
+
 
 # application execution
 if __name__ == '__main__':
     if not (db.database):
         init_db()
-    Timer(1.25, browser()).start()
-    app.run(port=8090)
+    Timer(0.1, app.run(port=8090)).start()
+    if DEBUG:
+        Timer(0.25, browser()).start()
